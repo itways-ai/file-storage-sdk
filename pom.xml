@@ -9,10 +9,10 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.itways.assistant</groupId>
-	<artifactId>attachment-engine-sdk</artifactId>
+	<artifactId>file-storage-sdk</artifactId>
 	<version>1.0.0</version>
-	<name>attachment-engine-sdk</name>
-	<description>attachment engine</description>
+	<name>file-storage-sdk</name>
+	<description>File storage SDK: uploads files to Cloudflare R2 and returns public URLs</description>
 	<url/>
 	<licenses>
 		<license/>
