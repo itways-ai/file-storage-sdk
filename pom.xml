@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.itways.assistant</groupId>
 	<artifactId>file-storage-sdk</artifactId>
-	<version>1.0.0</version>
+	<version>2.0.0</version>
 	<name>file-storage-sdk</name>
 	<description>File storage SDK: uploads files to Cloudflare R2 and returns public URLs</description>
 	<url/>
@@ -28,7 +28,20 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<!-- AWS SDK for Java v2 (v1 reached end of support on 2025-12-31). -->
+		<aws-sdk.version>2.55.6</aws-sdk.version>
 	</properties>
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>software.amazon.awssdk</groupId>
+				<artifactId>bom</artifactId>
+				<version>${aws-sdk.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -41,11 +54,33 @@
 			<optional>true</optional>
 		</dependency>
 
-		<!-- AWS SDK for S3 (Cloudflare R2 compatible) -->
+		<!-- AWS SDK v2 S3 client (Cloudflare R2 is S3-compatible). Only the
+		     synchronous client is used, over the JDK's HttpURLConnection
+		     transport: the SDK's default apache5-client needs httpclient5 5.4+,
+		     but Spring Boot's dependency management (here and in every consuming
+		     service) pins an older httpclient5, which fails at runtime with
+		     NoClassDefFoundError. The Netty async transport is not needed. -->
 		<dependency>
-			<groupId>com.amazonaws</groupId>
-			<artifactId>aws-java-sdk-s3</artifactId>
-			<version>1.12.772</version>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<exclusions>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>apache5-client</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>apache-client</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>netty-nio-client</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>url-connection-client</artifactId>
 		</dependency>
 
 		<!-- Test -->
