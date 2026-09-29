@@ -6,7 +6,8 @@ auth-service for profile pictures.
 
 - Group / artifact: `com.itways.assistant:file-storage-sdk`
 - Version: `2.0.1` (2.x uses AWS SDK for Java v2; 1.x used the end-of-support v1)
-- Java 21, Spring Boot 3.2 parent
+- Parent `com.itways:platform-parent` 2.0.0 (from `common-lib`): Java 21,
+  Spring Boot 3.2.2 and the AWS SDK BOM 2.55.6
 - Depends only on what the code uses: `spring-boot-autoconfigure`, `spring-web`
   (for `MultipartFile`), `jakarta.annotation-api`, `slf4j-api` and the AWS S3
   client. The consuming service brings its own web server, Jackson and logging
@@ -102,11 +103,12 @@ The S3 client (bean `fileStorageS3Client`) is built in
 
 ## Build
 
-The host JDK may be too new for Lombok; build in the Maven container:
+Install `common-lib` first (it provides the parent), then build with JDK 21
+(newer JDKs break Lombok):
 
 ```bash
-docker run --rm -v "$PWD":/src -v "$HOME/.m2":/root/.m2 -w /src \
-  maven:3.9-eclipse-temurin-21 mvn -B clean install
+mvn -f ../common-lib/pom.xml install -DskipTests
+JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn clean install
 ```
 
 `docker/java/Dockerfile` installs this library, from the workspace, before
