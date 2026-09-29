@@ -2,6 +2,7 @@ package com.itways.assistant.attachment.config;
 
 import java.net.URI;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -18,8 +19,21 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 
+/**
+ * Wires {@link com.itways.assistant.attachment.service.AttachmentService} from
+ * {@code cloudflare.r2.*}. Registered as a Spring Boot auto-configuration
+ * ({@code META-INF/spring/...AutoConfiguration.imports}), so having the jar on
+ * the classpath is enough; {@code @EnableAttachment} imports the same class and
+ * still works, alone or together with the auto-configuration (one set of beans).
+ * <p>
+ * Active only when the R2 credentials ({@code cloudflare.r2.access-key} and
+ * {@code cloudflare.r2.secret-key}) are set: without them the S3 client cannot
+ * be built, and an application that has the jar but does not use it must still
+ * start.
+ */
 @Slf4j
 @Configuration
+@ConditionalOnProperty(prefix = "cloudflare.r2", name = { "access-key", "secret-key" })
 @EnableConfigurationProperties
 @ComponentScan("com.itways.assistant.attachment")
 public class UploadAutoConfiguration {

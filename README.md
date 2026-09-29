@@ -5,13 +5,26 @@ object storage) and returns their public URLs. Today it is used by
 auth-service for profile pictures.
 
 - Group / artifact: `com.itways.assistant:file-storage-sdk`
-- Version: `2.0.0` (2.x uses AWS SDK for Java v2; 1.x used the end-of-support v1)
+- Version: `2.0.1` (2.x uses AWS SDK for Java v2; 1.x used the end-of-support v1)
 - Java 21, Spring Boot 3.2 parent
+- Depends only on what the code uses: `spring-boot-autoconfigure`, `spring-web`
+  (for `MultipartFile`), `jakarta.annotation-api`, `slf4j-api` and the AWS S3
+  client. The consuming service brings its own web server, Jackson and logging
+  backend (2.0.0 pulled in all of `spring-boot-starter-web`).
 
 ## Use it
 
-Add the dependency and put `@EnableAttachment` on the application class, then
-inject `AttachmentService`:
+Add the dependency, set the `cloudflare.r2.*` properties (below) and inject
+`AttachmentService`. `UploadAutoConfiguration` is a Spring Boot
+auto-configuration (`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`),
+so the jar on the classpath is enough. `@EnableAttachment` on the application
+class still works and gives the same single set of beans. (Up to 2.0.0 the
+imports file sat under `spring/` without `META-INF/`, so only `@EnableAttachment`
+wired anything.)
+
+The configuration applies only when both `cloudflare.r2.access-key` and
+`cloudflare.r2.secret-key` are set, so an application that has the jar but does
+not configure R2 still starts (without an `AttachmentService`).
 
 ```java
 UploadResponse r = attachmentService.upload("avatars/" + accountId, "avatar.png", bytes);
@@ -112,6 +125,9 @@ records requests. They drive the real client, built as in production, and cover:
 - public URL shape for `public-domain`, bare domain and `public-base-url`;
 - delete by key, input validation, storage errors mapped to
   `AttachmentStorageException`;
-- `@EnableAttachment` wiring from `cloudflare.r2.*` properties.
+- `@EnableAttachment` wiring from `cloudflare.r2.*` properties;
+- the auto-configuration: listed in the imports file, working without
+  `@EnableAttachment`, one set of beans with it, and backing off without
+  credentials (`UploadAutoConfigurationTest`).
 
 No test calls Cloudflare.
