@@ -5,8 +5,8 @@ object storage) and returns their public URLs. Today it is used by
 auth-service for profile pictures.
 
 - Group / artifact: `com.itways.assistant:file-storage-sdk`
-- Version: `2.0.1` (2.x uses AWS SDK for Java v2; 1.x used the end-of-support v1)
-- Parent `com.itways:platform-parent` 2.0.0 (from `common-lib`): Java 21,
+- Version: `2.0.2` (2.x uses AWS SDK for Java v2; 1.x used the end-of-support v1)
+- Parent `com.itways:platform-parent` 2.1.0 (from `common-lib`): Java 21,
   Spring Boot 3.2.2 and the AWS SDK BOM 2.55.6
 - Depends only on what the code uses: `spring-boot-autoconfigure`, `spring-web`
   (for `MultipartFile`), `jakarta.annotation-api`, `slf4j-api` and the AWS S3

@@ -8,13 +8,13 @@
 	<parent>
 		<groupId>com.itways</groupId>
 		<artifactId>platform-parent</artifactId>
-		<version>2.0.0</version>
+		<version>2.1.0</version>
 		<relativePath/>
 	</parent>
 	<!-- Explicit: platform-bom names this artifact with these coordinates. -->
 	<groupId>com.itways.assistant</groupId>
 	<artifactId>file-storage-sdk</artifactId>
-	<version>2.0.1</version>
+	<version>2.0.2</version>
 	<name>file-storage-sdk</name>
 	<description>File storage SDK: uploads files to Cloudflare R2 and returns public URLs</description>
 	<url/>
