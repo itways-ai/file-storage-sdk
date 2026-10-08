@@ -1,259 +1,135 @@
-# Upload Engine SDK
+# file-storage-sdk
 
-A Spring Boot SDK for seamless file uploads to Cloudflare R2 storage. This library provides auto-configuration and a simple service interface for integrating cloud storage capabilities into your Spring Boot applications.
+A small Spring library that stores files in Cloudflare R2 (S3-compatible
+object storage) and returns their public URLs. Today it is used by
+auth-service for profile pictures.
 
-## Features
+- Group / artifact: `com.itways.assistant:file-storage-sdk`
+- Version: `2.0.2` (2.x uses AWS SDK for Java v2; 1.x used the end-of-support v1)
+- Parent `com.itways:platform-parent` 2.1.0 (from `common-lib`): Java 21,
+  Spring Boot 3.2.2 and the AWS SDK BOM 2.55.6
+- Depends only on what the code uses: `spring-boot-autoconfigure`, `spring-web`
+  (for `MultipartFile`), `jakarta.annotation-api`, `slf4j-api` and the AWS S3
+  client. The consuming service brings its own web server, Jackson and logging
+  backend (2.0.0 pulled in all of `spring-boot-starter-web`).
 
-- 🚀 **Auto-configuration** - Zero boilerplate setup with Spring Boot auto-configuration
-- ☁️ **Cloudflare R2 Support** - Built-in integration with Cloudflare R2 (S3-compatible)
-- 🔧 **Simple API** - Clean service interface for file uploads
-- 📦 **Spring Boot 3.5+** - Built on the latest Spring Boot framework
-- 🔐 **Secure** - Configurable access credentials and bucket management
-- 🎯 **Folder Organization** - Support for organizing uploads into folders
+## Use it
 
-## Requirements
+Add the dependency, set the `cloudflare.r2.*` properties (below) and inject
+`AttachmentService`. `UploadAutoConfiguration` is a Spring Boot
+auto-configuration (`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`),
+so the jar on the classpath is enough. `@EnableAttachment` on the application
+class still works and gives the same single set of beans. (Up to 2.0.0 the
+imports file sat under `spring/` without `META-INF/`, so only `@EnableAttachment`
+wired anything.)
 
-- Java 21+
-- Spring Boot 3.5+
-- Maven 3.6+
-
-## Installation
-
-Add the dependency to your `pom.xml`:
-
-```xml
-<dependency>
-    <groupId>com.itways.assistant</groupId>
-    <artifactId>attachment-engine-sdk</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
-</dependency>
-```
-
-## Quick Start
-
-### 1. Enable Upload SDK
-
-Add the `@EnableUpload` annotation to your Spring Boot application:
-
-### 2. Configure Cloudflare R2
-
-Add the following properties to your `application.yml` or `application.properties`:
-
-**application.yml:**
-```yaml
-cloudflare:
-  r2:
-    access-key: your-access-key
-    secret-key: your-secret-key
-    account-id: your-account-id
-    bucket: your-bucket-name
-    public-base-url: https://your-public-domain.com  # Optional: Full base URL
-    public-domain: your-public-domain.com            # Optional: Domain only
-```
-
-**application.properties:**
-```properties
-# Cloudflare R2
-cloudflare.r2.access-key=${CLOUDFLARE_R2_ACCESS_KEY:64a352a6e3befc5811990a2127c1db20}
-cloudflare.r2.secret-key=${CLOUDFLARE_R2_SECRET_KEY:78a8c57fbbdf2fd0f0780d61ff60bcc2b6a6ae89d9b008f1b2bf27329dc47c5d}
-cloudflare.r2.bucket=${CLOUDFLARE_R2_BUCKET:media-service}
-cloudflare.r2.account-id=${CLOUDFLARE_R2_ACCOUNT_ID:78d23ccb3da0c2429824c8c4a3423f6d}
-cloudflare.r2.public-domain=${CLOUDFLARE_R2_PUBLIC_DOMAIN:https://profily.site}
-cloudflare.r2.public-base-url=${CLOUDFLARE_R2_PUBLIC_URL:https://profily.site}
-```
-
-> **Note:** Either `public-base-url` or `public-domain` must be configured. The SDK prefers `public-base-url` if both are provided.
-
-### 3. Use the Upload Service
-
-Inject the `UploadService` and start uploading files:
+The configuration applies only when both `cloudflare.r2.access-key` and
+`cloudflare.r2.secret-key` are set, so an application that has the jar but does
+not configure R2 still starts (without an `AttachmentService`).
 
 ```java
-import com.itways.assistant.upload_engine_sdk.service.UploadService;
-import com.itways.assistant.upload_engine_sdk.dto.UploadResponse;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
-
-@RestController
-@RequestMapping("/api/files")
-public class FileController {
-
-    private final UploadService uploadService;
-
-    public FileController(UploadService uploadService) {
-        this.uploadService = uploadService;
-    }
-
-    @PostMapping("/upload")
-    public UploadResponse uploadFile(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "folder", defaultValue = "uploads") String folder) {
-        return uploadService.upload(file, folder);
-    }
-}
+UploadResponse r = attachmentService.upload("avatars/" + accountId, "avatar.png", bytes);
+r.getUrl();   // https://<public host>/avatars/<accountId>/<uuid>-avatar.png, store this
+r.getKey();   // avatars/<accountId>/<uuid>-avatar.png, pass it to delete()
+attachmentService.delete(r.getKey());
 ```
 
-## API Reference
+| Method | What it does |
+|---|---|
+| `upload(keyPrefix, fileName, bytes)` | Stores the bytes under a new unique key; returns URL and key. Rejects empty content and content over 50 MB (`IllegalArgumentException`). |
+| `upload(fileName, bytes)` | Same, with the configured default prefix (`cloudflare.r2.key-prefix`, blank means the bucket root). |
+| `delete(key)` | Deletes one object. A key that does not exist still succeeds, as in S3. |
 
-### UploadService Interface
+Storage errors are thrown as `AttachmentStorageException` (a `RuntimeException`).
+There is no read method: objects are served straight from the public host.
 
-```java
-public interface UploadService {
-    UploadResponse upload(MultipartFile file, String folder);
-}
+## Object keys
+
+```
+[<keyPrefix>/]<uuid>-<sanitised file name>
 ```
 
-**Parameters:**
-- `file` - The multipart file to upload
-- `folder` - The folder path within the bucket (e.g., "images", "documents/pdfs")
+- The random UUID makes every key unique, so an upload can never overwrite an
+  existing object, whatever name the caller passes, and URLs cannot be guessed.
+- The file name keeps `[A-Za-z0-9_-]` and its extension; anything else becomes
+  `_`. Names longer than 128 characters are cut, keeping the extension.
+- Each `/`-separated prefix segment is sanitised the same way and empty
+  segments are dropped, so a prefix can never contain `..`.
+- The content type comes from the extension: png, jpg/jpeg, gif, webp, pdf,
+  txt and json are fixed; other extensions are probed from the host's MIME
+  database and fall back to `application/octet-stream`.
 
-**Returns:** `UploadResponse` object containing:
-- `fileName` - The full path of the uploaded file
-- `url` - The public URL to access the file
-- `success` - Boolean indicating upload success
-- `message` - Success or error message
+The public URL is `<public base>/<key>`, where the base is `public-base-url`
+if set, otherwise `public-domain` (`https://` is added when it has no scheme).
+A trailing `/` on the base is ignored.
 
-### UploadResponse DTO
+## Configuration
 
-```java
-public class UploadResponse {
-    private String fileName;
-    private String url;
-    private boolean success;
-    private String message;
-}
-```
+All under `cloudflare.r2.*`. The consuming service maps them to environment
+variables; auth-service uses the names below. Never commit real values.
 
-## Configuration Properties
+| Property | Environment variable (auth-service) | Required | Notes |
+|---|---|---|---|
+| `account-id` | `CLOUDFLARE_R2_ACCOUNT_ID` | yes | Builds the endpoint `https://<account-id>.r2.cloudflarestorage.com`. |
+| `access-key` | `CLOUDFLARE_R2_ACCESS_KEY` | yes | R2 API token access key id. |
+| `secret-key` | `CLOUDFLARE_R2_SECRET_KEY` | yes | R2 API token secret. |
+| `bucket` | `CLOUDFLARE_R2_BUCKET` | yes | |
+| `public-domain` | `CLOUDFLARE_R2_PUBLIC_DOMAIN` | one of these two | Public host of the bucket (custom domain or `r2.dev`). |
+| `public-base-url` | none | one of these two | Takes precedence over `public-domain`; may include a path. |
+| `key-prefix` | none | no | Default prefix for `upload(fileName, bytes)`. |
+| `endpoint` | none | no | Overrides the derived R2 endpoint. For tests and S3-compatible stand-ins only. |
 
-| Property | Required | Description | Example |
-|----------|----------|-------------|---------|
-| `cloudflare.r2.access-key` | Yes | Cloudflare R2 access key | `abc123...` |
-| `cloudflare.r2.secret-key` | Yes | Cloudflare R2 secret key | `xyz789...` |
-| `cloudflare.r2.account-id` | Yes | Cloudflare account ID | `1234567890abcdef` |
-| `cloudflare.r2.bucket` | Yes | R2 bucket name | `my-app-storage` |
-| `cloudflare.r2.public-base-url` | No* | Full public URL base | `https://cdn.example.com` |
-| `cloudflare.r2.public-domain` | No* | Public domain only | `cdn.example.com` |
+With no real credentials, auth-service uses the stand-in `r2disabled` for the
+three credential variables so the service still starts; uploads then fail
+with a storage error (auth-service answers 503).
 
-*At least one of `public-base-url` or `public-domain` must be configured.
+## R2 client settings
 
-## How It Works
+The S3 client (bean `fileStorageS3Client`) is built in
+`UploadAutoConfiguration.buildS3Client` with:
 
-1. **Auto-Configuration**: The SDK uses Spring Boot's auto-configuration mechanism to automatically set up the necessary beans when `@EnableUpload` is present.
+- endpoint override as above, region `auto` (R2 ignores it; SigV4 needs one);
+- path-style addressing (`https://<endpoint>/<bucket>/<key>`);
+- `requestChecksumCalculation` and `responseChecksumValidation` set to
+  `WHEN_REQUIRED`. Since SDK 2.30 the default adds CRC checksums, sent as
+  aws-chunked trailers, to every upload, which R2 has rejected or
+  mishandled;
+- chunked encoding off, so every upload is one plain PUT body with a
+  `Content-Length`, as with the 1.x client;
+- the JDK `HttpURLConnection` transport (`url-connection-client`). The SDK's
+  default Apache 5 client needs httpclient5 5.4 or later, but Spring Boot's
+  dependency management (here and in consuming services) pins an older
+  version, which fails at runtime with `NoClassDefFoundError`.
 
-2. **S3 Compatibility**: Cloudflare R2 is S3-compatible, so the SDK uses the AWS S3 SDK under the hood.
+## Build
 
-3. **File Upload Flow**:
-   - Receives a `MultipartFile` from your controller
-   - Constructs the file path using the provided folder
-   - Uploads to Cloudflare R2 with proper metadata
-   - Returns a public URL for accessing the file
-
-## Example Use Cases
-
-### Upload User Profile Pictures
-
-```java
-@PostMapping("/profile/avatar")
-public UploadResponse uploadAvatar(@RequestParam("avatar") MultipartFile file) {
-    return uploadService.upload(file, "profiles/avatars");
-}
-```
-
-### Upload Documents with Validation
-
-```java
-@PostMapping("/documents")
-public ResponseEntity<?> uploadDocument(@RequestParam("file") MultipartFile file) {
-    // Validate file
-    if (file.isEmpty()) {
-        return ResponseEntity.badRequest().body("File is empty");
-    }
-    
-    if (file.getSize() > 10_000_000) { // 10MB limit
-        return ResponseEntity.badRequest().body("File too large");
-    }
-    
-    // Upload
-    UploadResponse response = uploadService.upload(file, "documents");
-    
-    if (response.isSuccess()) {
-        return ResponseEntity.ok(response);
-    } else {
-        return ResponseEntity.status(500).body(response);
-    }
-}
-```
-
-### Organize Uploads by Date
-
-```java
-@PostMapping("/media")
-public UploadResponse uploadMedia(@RequestParam("file") MultipartFile file) {
-    String folder = "media/" + LocalDate.now().format(DateTimeFormatter.ISO_DATE);
-    return uploadService.upload(file, folder);
-}
-```
-
-## Dependencies
-
-The SDK includes the following key dependencies:
-
-- **Spring Boot Starter Web** (3.5.10) - Web framework support
-- **AWS Java SDK S3** (1.12.772) - S3-compatible storage client
-- **Lombok** - Reduces boilerplate code
-
-## Building from Source
+Install `common-lib` first (it provides the parent), then build with JDK 21
+(newer JDKs break Lombok):
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-
-# Navigate to the project
-cd attachment-engine-sdk
-
-# Build with Maven
-./mvnw clean install
-
-# Skip tests (if needed)
-./mvnw clean install -DskipTests
+mvn -f ../common-lib/pom.xml install -DskipTests
+JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn clean install
 ```
 
-## Troubleshooting
+`docker/java/Dockerfile` installs this library, from the workspace, before
+building the services.
 
-### "No publicBaseUrl or publicDomain configured"
+## Tests
 
-**Solution:** Ensure you've configured either `cloudflare.r2.public-base-url` or `cloudflare.r2.public-domain` in your application properties.
+`mvn clean install` runs the unit tests. They need no Docker and no network:
+`StubS3Server` is a small S3-compatible HTTP server on 127.0.0.1 that
+records requests. They drive the real client, built as in production, and cover:
 
-### "Upload failed: Access Denied"
+- key shape, uniqueness (the same name twice gives two keys) and sanitising
+  of prefix and name;
+- content type per extension;
+- no checksum headers, no aws-chunked body, region `auto` in the signature;
+- public URL shape for `public-domain`, bare domain and `public-base-url`;
+- delete by key, input validation, storage errors mapped to
+  `AttachmentStorageException`;
+- `@EnableAttachment` wiring from `cloudflare.r2.*` properties;
+- the auto-configuration: listed in the imports file, working without
+  `@EnableAttachment`, one set of beans with it, and backing off without
+  credentials (`UploadAutoConfigurationTest`).
 
-**Solution:** Verify your Cloudflare R2 credentials and ensure the bucket exists with proper permissions.
-
-### Auto-configuration not working
-
-**Solution:** Make sure you've added `@EnableUpload` to your main application class and the SDK is on your classpath.
-
-## Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is part of the IT Ways Assistant platform.
-
-## Support
-
-For issues, questions, or contributions, please contact the development team or open an issue in the repository.
-
----
-
-**Package:** `com.itways.assistant.upload_engine_sdk`  
-**Version:** 0.0.1-SNAPSHOT  
-**Spring Boot:** 3.5.10  
-**Java:** 21+
+No test calls Cloudflare.

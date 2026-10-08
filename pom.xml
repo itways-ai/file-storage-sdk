@@ -2,17 +2,21 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
+	<!-- The platform parent: Java 21, Spring Boot 3.2.2 and the AWS SDK BOM (2.55.6)
+	     for the versions below, and JaCoCo, surefire and the sources jar for the
+	     build. This is a library: no spring-boot-maven-plugin. -->
 	<parent>
-		<groupId>org.springframework.boot</groupId>
-		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.2.2</version>
-		<relativePath/> <!-- lookup parent from repository -->
+		<groupId>com.itways</groupId>
+		<artifactId>platform-parent</artifactId>
+		<version>2.5.0</version>
+		<relativePath/>
 	</parent>
+	<!-- Explicit: platform-bom names this artifact with these coordinates. -->
 	<groupId>com.itways.assistant</groupId>
-	<artifactId>attachment-engine-sdk</artifactId>
-	<version>1.0.0</version>
-	<name>attachment-engine-sdk</name>
-	<description>attachment engine</description>
+	<artifactId>file-storage-sdk</artifactId>
+	<version>2.0.2</version>
+	<name>file-storage-sdk</name>
+	<description>File storage SDK: uploads files to Cloudflare R2 and returns public URLs</description>
 	<url/>
 	<licenses>
 		<license/>
@@ -26,13 +30,31 @@
 		<tag/>
 		<url/>
 	</scm>
-	<properties>
-		<java.version>21</java.version>
-	</properties>
 	<dependencies>
+		<!-- Only what the code uses (versions from the parent). A library
+		     must not bring a web server, Jackson or a logging backend: the
+		     consuming service chooses those (2.0.0 pulled in all of
+		     spring-boot-starter-web). -->
+		<!-- @ConfigurationProperties, @ConditionalOnProperty; brings spring-boot,
+		     spring-context and spring-core. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-web</artifactId>
+			<artifactId>spring-boot-autoconfigure</artifactId>
+		</dependency>
+		<!-- MultipartFile (FileUtils.toMultipartFile, ByteArrayMultipartFile). -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-web</artifactId>
+		</dependency>
+		<!-- @PostConstruct -->
+		<dependency>
+			<groupId>jakarta.annotation</groupId>
+			<artifactId>jakarta.annotation-api</artifactId>
+		</dependency>
+		<!-- Lombok @Slf4j -->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
 		</dependency>
 
 		<dependency>
@@ -41,11 +63,33 @@
 			<optional>true</optional>
 		</dependency>
 
-		<!-- AWS SDK for S3 (Cloudflare R2 compatible) -->
+		<!-- AWS SDK v2 S3 client (Cloudflare R2 is S3-compatible). Only the
+		     synchronous client is used, over the JDK's HttpURLConnection
+		     transport: the SDK's default apache5-client needs httpclient5 5.4+,
+		     but Spring Boot's dependency management (here and in every consuming
+		     service) pins an older httpclient5, which fails at runtime with
+		     NoClassDefFoundError. The Netty async transport is not needed. -->
 		<dependency>
-			<groupId>com.amazonaws</groupId>
-			<artifactId>aws-java-sdk-s3</artifactId>
-			<version>1.12.772</version>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<exclusions>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>apache5-client</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>apache-client</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>netty-nio-client</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>url-connection-client</artifactId>
 		</dependency>
 
 		<!-- Test -->
@@ -58,35 +102,10 @@
 
 	<build>
 		<plugins>
+			<!-- The shared formatter, configured in platform-parent: `mvn spotless:apply` / `mvn spotless:check`. -->
 			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-source-plugin</artifactId>
-				<version>3.3.0</version>
-				<executions>
-					<execution>
-						<id>attach-sources</id>
-						<goals><goal>jar</goal></goals>
-					</execution>
-				</executions>
-			</plugin>
-			<plugin>
-				<groupId>org.jacoco</groupId>
-				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>0.8.13</version>
-				<executions>
-					<execution>
-						<goals>
-							<goal>prepare-agent</goal>
-						</goals>
-					</execution>
-					<execution>
-						<id>report</id>
-						<phase>test</phase>
-						<goals>
-							<goal>report</goal>
-						</goals>
-					</execution>
-				</executions>
+				<groupId>com.diffplug.spotless</groupId>
+				<artifactId>spotless-maven-plugin</artifactId>
 			</plugin>
 		</plugins>
 	</build>
